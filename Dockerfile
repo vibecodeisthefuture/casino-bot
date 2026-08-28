@@ -16,7 +16,6 @@ COPY requirements.txt /app/requirements.txt
 RUN pip install --upgrade pip && pip install -r /app/requirements.txt
 
 COPY app /app/app
-COPY config.yml /app/config.yml
 COPY README.md /app/README.md
 
 RUN useradd --create-home --uid 10001 appuser \
