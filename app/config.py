@@ -21,6 +21,8 @@ class BotConfig(BaseModel):
     default_bet: int = Field(default=100, ge=1, le=1_000_000)
     bonus_multiplier: int = Field(default=5, ge=1, le=1_000)
     bonus_cooldown: int = Field(default=12, ge=1, le=168)
+    daily_amount: int = Field(default=500, ge=1, le=1_000_000)
+    daily_cooldown: int = Field(default=24, ge=1, le=168)
 
 
 class StorageConfig(BaseModel):
@@ -41,6 +43,8 @@ env_vars = (
     "DISCORD_DEFAULT_BET",
     "DISCORD_BONUS_MULTIPLIER",
     "DISCORD_BONUS_COOLDOWN",
+    "DISCORD_DAILY_AMOUNT",
+    "DISCORD_DAILY_COOLDOWN",
     "CASINO_DATA_DIR",
     "CASINO_DATABASE_PATH",
     "CASINO_LOG_PATH",
@@ -80,6 +84,8 @@ def load_config() -> Config:
             default_bet=_parse_int_env("DISCORD_DEFAULT_BET", 100),
             bonus_multiplier=_parse_int_env("DISCORD_BONUS_MULTIPLIER", 5),
             bonus_cooldown=_parse_int_env("DISCORD_BONUS_COOLDOWN", 12),
+            daily_amount=_parse_int_env("DISCORD_DAILY_AMOUNT", 500),
+            daily_cooldown=_parse_int_env("DISCORD_DAILY_COOLDOWN", 24),
         )
         data_dir = _parse_path_env("CASINO_DATA_DIR", DEFAULT_DATA_DIR)
         database_path = _parse_path_env(

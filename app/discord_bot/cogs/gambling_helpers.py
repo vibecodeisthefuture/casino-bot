@@ -1,11 +1,13 @@
 import logging
+import time
 
 import discord
 from discord.ext import commands
 
 from app.config import config
+from app.discord_bot.modules.betting import validate_positive_amount
 from app.discord_bot.modules.economy import Economy
-from app.discord_bot.modules.helpers import make_embed
+from app.discord_bot.modules.helpers import InsufficientFundsException, make_embed
 from app.discord_bot.modules.wallet_logging import log_wallet_change
 
 logger = logging.getLogger(__name__)
@@ -96,6 +98,96 @@ class GamblingHelpers(commands.Cog, name="General"):
                 value="${:,}".format(entry[1]),
                 inline=False,
             )
+        await ctx.send(embed=embed)
+
+    @commands.command(
+        brief=(
+            f"Claim your free ${config.bot.daily_amount} "
+            f"every {config.bot.daily_cooldown}hrs"
+        ),
+        usage="daily",
+    )
+    async def daily(self, ctx: commands.Context):
+        now = int(time.time())
+        cooldown_seconds = config.bot.daily_cooldown * 3600
+        last_claim = self.economy.get_last_daily(ctx.author.id)
+        elapsed = now - last_claim
+        if last_claim and elapsed < cooldown_seconds:
+            remaining = cooldown_seconds - elapsed
+            hours, rem = divmod(remaining, 3600)
+            minutes, seconds = divmod(rem, 60)
+            await ctx.send(
+                "You've already claimed your daily reward. "
+                f"Come back in {hours}hrs {minutes}min {seconds}sec."
+            )
+            return
+        amount = config.bot.daily_amount
+        self.economy.add_money(ctx.author.id, amount)
+        self.economy.set_last_daily(ctx.author.id, now)
+        log_wallet_change(
+            logger,
+            event="daily_claim",
+            user_id=ctx.author.id,
+            money_delta=amount,
+            ctx=ctx,
+        )
+        balance = self.economy.get_entry(ctx.author.id)[1]
+        embed = make_embed(
+            title="Daily reward claimed!",
+            description=f"You received **${amount:,}**.\nBalance: **${balance:,}**",
+            color=discord.Color.green(),
+        )
+        await ctx.send(embed=embed)
+
+    @commands.command(
+        brief="Give some of your money to another member",
+        usage="pay [@member] [amount]",
+        aliases=["give"],
+    )
+    async def pay(
+        self,
+        ctx: commands.Context,
+        member: discord.Member,
+        amount: int,
+    ):
+        if member.bot:
+            await ctx.send("You can't pay bots.")
+            return
+        if member.id == ctx.author.id:
+            await ctx.send("You can't pay yourself.")
+            return
+        parsed = validate_positive_amount(amount)
+        try:
+            sender_entry, _ = self.economy.transfer_money(
+                ctx.author.id, member.id, parsed
+            )
+        except RuntimeError:
+            current = self.economy.get_entry(ctx.author.id)[1]
+            raise InsufficientFundsException(current, parsed)
+        log_wallet_change(
+            logger,
+            event="pay_sent",
+            user_id=ctx.author.id,
+            money_delta=-parsed,
+            ctx=ctx,
+            recipient_user_id=member.id,
+        )
+        log_wallet_change(
+            logger,
+            event="pay_received",
+            user_id=member.id,
+            money_delta=parsed,
+            ctx=ctx,
+            sender_user_id=ctx.author.id,
+        )
+        embed = make_embed(
+            title="Payment sent",
+            description=(
+                f"{ctx.author.mention} paid **${parsed:,}** to {member.mention}.\n"
+                f"Your balance: **${sender_entry[1]:,}**"
+            ),
+            color=discord.Color.green(),
+        )
         await ctx.send(embed=embed)
 
 

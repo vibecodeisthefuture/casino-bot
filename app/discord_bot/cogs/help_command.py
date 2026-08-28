@@ -67,7 +67,7 @@ class Help(commands.Cog, name="help"):
     @commands.command(hidden=True)
     @commands.is_owner()
     async def kill(self, ctx: commands.Context):
-        self.client.remove_cog("handlers")
+        await self.client.remove_cog("handlers")
         await self.client.close()
 
 

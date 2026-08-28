@@ -11,7 +11,7 @@ from app.config import config
 Entry = Tuple[int, int, int]
 DATABASE_PATH = Path(config.storage.database_path)
 LEGACY_DATABASE_PATH = Path(__file__).resolve().parents[3] / "economy.db"
-SCHEMA_VERSION = 2
+SCHEMA_VERSION = 3
 
 logger = logging.getLogger(__name__)
 
@@ -30,9 +30,19 @@ def _migration_2_add_indexes(cur: sqlite3.Cursor) -> None:
     cur.execute("CREATE INDEX IF NOT EXISTS idx_economy_money ON economy(money DESC)")
 
 
+def _migration_3_create_daily_claims(cur: sqlite3.Cursor) -> None:
+    cur.execute(
+        """CREATE TABLE IF NOT EXISTS daily_claims (
+        user_id INTEGER NOT NULL PRIMARY KEY,
+        last_claim INTEGER NOT NULL DEFAULT 0
+    )"""
+    )
+
+
 MIGRATIONS: dict[int, Callable[[sqlite3.Cursor], None]] = {
     1: _migration_1_create_economy,
     2: _migration_2_add_indexes,
+    3: _migration_3_create_daily_claims,
 }
 
 
@@ -176,6 +186,59 @@ class Economy:
         )
         self.conn.commit()
         return self._fetch_entry(user_id)
+
+    def get_last_daily(self, user_id: int) -> int:
+        self.cur.execute(
+            "SELECT last_claim FROM daily_claims WHERE user_id=?",
+            (user_id,),
+        )
+        row = self.cur.fetchone()
+        return int(row[0]) if row else 0
+
+    def set_last_daily(self, user_id: int, timestamp: int) -> None:
+        self.cur.execute(
+            "INSERT INTO daily_claims(user_id, last_claim) VALUES(?, ?) "
+            "ON CONFLICT(user_id) DO UPDATE SET last_claim=excluded.last_claim",
+            (user_id, int(timestamp)),
+        )
+        self.conn.commit()
+
+    def transfer_money(
+        self, sender_id: int, recipient_id: int, amount: int
+    ) -> tuple[Entry, Entry]:
+        """Atomically move ``amount`` money from sender to recipient.
+
+        Raises ValueError for a non-positive amount or a self-transfer, and
+        RuntimeError if the sender has insufficient funds. Both balance updates
+        commit together or not at all.
+        """
+        amount = int(amount)
+        if amount <= 0:
+            raise ValueError("transfer amount must be positive")
+        if sender_id == recipient_id:
+            raise ValueError("cannot transfer to yourself")
+        self._ensure_entry(sender_id)
+        self._ensure_entry(recipient_id)
+        self.conn.commit()
+        try:
+            self.cur.execute(
+                "UPDATE economy SET money = money - ? WHERE user_id=? AND money >= ?",
+                (amount, sender_id, amount),
+            )
+            if self.cur.rowcount != 1:
+                self.conn.rollback()
+                raise RuntimeError("insufficient funds")
+            self.cur.execute(
+                "UPDATE economy SET money = money + ? WHERE user_id=?",
+                (amount, recipient_id),
+            )
+            self.conn.commit()
+        except RuntimeError:
+            raise
+        except Exception:
+            self.conn.rollback()
+            raise
+        return self._fetch_entry(sender_id), self._fetch_entry(recipient_id)
 
     def random_entry(self) -> Entry:
         self.cur.execute("SELECT * FROM economy")
