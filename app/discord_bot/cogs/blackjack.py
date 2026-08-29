@@ -7,6 +7,7 @@ from typing import Union
 from uuid import uuid4
 
 import discord
+from discord import app_commands
 from discord.ext import commands
 
 from app.config import config
@@ -101,10 +102,14 @@ class Blackjack(commands.Cog):
             return f"-${abs(amount)}"
         return "$0"
 
-    @commands.command(
+    @commands.hybrid_command(
         aliases=["bj"],
         brief="Play blackjack with common casino rules.\nBet must be greater than $0",
+        description="Play blackjack with common casino rules",
         usage=f"blackjack [bet- default=${config.bot.default_bet}]",
+    )
+    @app_commands.describe(
+        bet=f"Amount to wager (default {config.bot.default_bet})",
     )
     @commands.max_concurrency(1, per=commands.BucketType.user, wait=False)
     async def blackjack(
@@ -114,6 +119,8 @@ class Blackjack(commands.Cog):
     ):
         bankroll = self.check_bet(ctx, bet)
         base_bet = int(bet)
+        if ctx.interaction is not None:
+            await ctx.defer()
 
         deck = [Card(suit, num) for num in range(2, 15) for suit in Card.suits]
         random.shuffle(deck)

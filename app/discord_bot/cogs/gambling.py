@@ -5,6 +5,7 @@ from contextlib import suppress
 from uuid import uuid4
 
 import discord
+from discord import app_commands
 from discord.ext import commands
 from discord.ext.commands.errors import BadArgument
 
@@ -240,9 +241,14 @@ class Gambling(commands.Cog):
         finally:
             table_buffer.close()
 
-    @commands.command(
+    @commands.hybrid_command(
         brief="Flip a coin\nBet must be greater than $0",
+        description="Flip a coin — bet must be greater than $0",
         usage=f"flip [heads|tails] *[bet- default=${config.bot.default_bet}]",
+    )
+    @app_commands.describe(
+        choice="heads or tails",
+        bet=f"Amount to wager (default {config.bot.default_bet})",
     )
     async def flip(
         self,
@@ -279,9 +285,14 @@ class Gambling(commands.Cog):
         else:
             raise BadArgument()
 
-    @commands.command(
+    @commands.hybrid_command(
         brief="Roll 1 die\nBet must be greater than $0",
+        description="Roll one die (guess 1-6) — bet must be greater than $0",
         usage=f"roll [guess:1-6] [bet- default=${config.bot.default_bet}]",
+    )
+    @app_commands.describe(
+        choice="Your guess, 1 to 6",
+        bet=f"Amount to wager (default {config.bot.default_bet})",
     )
     async def roll(
         self,
@@ -321,10 +332,14 @@ class Gambling(commands.Cog):
         else:
             raise BadArgument()
 
-    @commands.command(
+    @commands.hybrid_command(
         brief="Draw a high card against the dealer.\nBet must be greater than $0",
+        description="Draw a high card against the dealer",
         usage=f"highcard *[bet- default=${config.bot.default_bet}]",
         aliases=["war"],
+    )
+    @app_commands.describe(
+        bet=f"Amount to wager (default {config.bot.default_bet})",
     )
     async def highcard(
         self,
@@ -332,6 +347,8 @@ class Gambling(commands.Cog):
         bet: int = config.bot.default_bet,
     ):
         normalized_bet = self.check_bet(ctx, bet)
+        if ctx.interaction is not None:
+            await ctx.defer()
         await self._send_highcard_round(
             destination=ctx,
             user=ctx.author,

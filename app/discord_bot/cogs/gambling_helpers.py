@@ -2,6 +2,7 @@ import logging
 import time
 
 import discord
+from discord import app_commands
 from discord.ext import commands
 
 from app.config import config
@@ -45,10 +46,14 @@ class GamblingHelpers(commands.Cog, name="General"):
             actor_user_id=ctx.author.id,
         )
 
-    @commands.command(
+    @commands.hybrid_command(
         brief=(
             f"Gives you ${config.bot.default_bet*config.bot.bonus_multiplier} "
             f"once every {config.bot.bonus_cooldown}hrs"
+        ),
+        description=(
+            f"Claim your ${config.bot.default_bet*config.bot.bonus_multiplier} "
+            f"bonus every {config.bot.bonus_cooldown}hrs"
         ),
         usage="add",
     )
@@ -65,11 +70,13 @@ class GamblingHelpers(commands.Cog, name="General"):
         )
         await ctx.send(f"Added ${amount} come back in {config.bot.bonus_cooldown}hrs")
 
-    @commands.command(
+    @commands.hybrid_command(
         brief="How much money you or someone else has",
+        description="Check your balance or someone else's",
         usage="money *[@member]",
         aliases=["credits"],
     )
+    @app_commands.describe(user="Whose balance to check (optional)")
     async def money(self, ctx: commands.Context, user: discord.Member | None = None):
         target_user = user or ctx.author
         profile = self.economy.get_entry(target_user.id)
@@ -82,8 +89,9 @@ class GamblingHelpers(commands.Cog, name="General"):
         embed.set_thumbnail(url=target_user.display_avatar.url)
         await ctx.send(embed=embed)
 
-    @commands.command(
+    @commands.hybrid_command(
         brief="Shows the user with the most money",
+        description="Show the richest players",
         usage="leaderboard",
         aliases=["top"],
     )
@@ -100,11 +108,12 @@ class GamblingHelpers(commands.Cog, name="General"):
             )
         await ctx.send(embed=embed)
 
-    @commands.command(
+    @commands.hybrid_command(
         brief=(
             f"Claim your free ${config.bot.daily_amount} "
             f"every {config.bot.daily_cooldown}hrs"
         ),
+        description=f"Claim your free ${config.bot.daily_amount} daily reward",
         usage="daily",
     )
     async def daily(self, ctx: commands.Context):
@@ -139,11 +148,13 @@ class GamblingHelpers(commands.Cog, name="General"):
         )
         await ctx.send(embed=embed)
 
-    @commands.command(
+    @commands.hybrid_command(
         brief="Give some of your money to another member",
+        description="Give some of your money to another member",
         usage="pay [@member] [amount]",
         aliases=["give"],
     )
+    @app_commands.describe(member="Who to pay", amount="How much to pay")
     async def pay(
         self,
         ctx: commands.Context,

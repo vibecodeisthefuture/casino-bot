@@ -23,6 +23,7 @@ class BotConfig(BaseModel):
     bonus_cooldown: int = Field(default=12, ge=1, le=168)
     daily_amount: int = Field(default=500, ge=1, le=1_000_000)
     daily_cooldown: int = Field(default=24, ge=1, le=168)
+    guild_id: int | None = None
 
 
 class StorageConfig(BaseModel):
@@ -45,6 +46,7 @@ env_vars = (
     "DISCORD_BONUS_COOLDOWN",
     "DISCORD_DAILY_AMOUNT",
     "DISCORD_DAILY_COOLDOWN",
+    "DISCORD_GUILD_ID",
     "CASINO_DATA_DIR",
     "CASINO_DATABASE_PATH",
     "CASINO_LOG_PATH",
@@ -61,6 +63,13 @@ def _parse_int_env(name: str, default: int) -> int:
     raw = getenv(name)
     if raw is None or raw.strip() == "":
         return default
+    return int(raw.strip())
+
+
+def _parse_optional_int_env(name: str) -> int | None:
+    raw = getenv(name)
+    if raw is None or raw.strip() == "":
+        return None
     return int(raw.strip())
 
 
@@ -86,6 +95,7 @@ def load_config() -> Config:
             bonus_cooldown=_parse_int_env("DISCORD_BONUS_COOLDOWN", 12),
             daily_amount=_parse_int_env("DISCORD_DAILY_AMOUNT", 500),
             daily_cooldown=_parse_int_env("DISCORD_DAILY_COOLDOWN", 24),
+            guild_id=_parse_optional_int_env("DISCORD_GUILD_ID"),
         )
         data_dir = _parse_path_env("CASINO_DATA_DIR", DEFAULT_DATA_DIR)
         database_path = _parse_path_env(

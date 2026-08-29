@@ -10,6 +10,7 @@ from uuid import uuid4
 
 import aiohttp
 import discord
+from discord import app_commands
 from discord.ext import commands
 from PIL import Image
 
@@ -220,12 +221,16 @@ class Slots(commands.Cog):
 
         return "none", 0
 
-    @commands.command(
+    @commands.hybrid_command(
         brief="Slot machine\nbet must be 1-3",
+        description="Spin the slot machine (bet 1-3 credits)",
         usage="slots *[bet]",
     )
+    @app_commands.describe(bet="Credits to bet, 1 to 3")
     async def slots(self, ctx: commands.Context, bet: int = 1):
         normalized_bet = self.check_bet(ctx, bet=bet)
+        if ctx.interaction is not None:
+            await ctx.defer()
         s1 = random.randint(1, self._reel_items - 1)
         s2 = random.randint(1, self._reel_items - 1)
         s3 = random.randint(1, self._reel_items - 1)
@@ -292,11 +297,13 @@ class Slots(commands.Cog):
             primary_gif=gif_bytes,
         )
 
-    @commands.command(
+    @commands.hybrid_command(
         brief=f"Purchase credits. Each credit is worth ${config.bot.default_bet}.",
+        description=f"Buy credits (each worth ${config.bot.default_bet})",
         usage="buyc [credits]",
         aliases=["buy", "b"],
     )
+    @app_commands.describe(amount_to_buy="How many credits to buy")
     async def buyc(self, ctx: commands.Context, amount_to_buy: int):
         user_id = ctx.author.id
         normalized_amount = validate_positive_amount(amount_to_buy)
@@ -316,11 +323,13 @@ class Slots(commands.Cog):
         )
         await ctx.invoke(self.client.get_command("money"))
 
-    @commands.command(
+    @commands.hybrid_command(
         brief=f"Sell credits. Each credit is worth ${config.bot.default_bet}.",
+        description=f"Sell credits (each worth ${config.bot.default_bet})",
         usage="sellc [credits]",
         aliases=["sell", "s"],
     )
+    @app_commands.describe(amount_to_sell="How many credits to sell")
     async def sellc(self, ctx: commands.Context, amount_to_sell: int):
         user_id = ctx.author.id
         normalized_amount = validate_credits_available(

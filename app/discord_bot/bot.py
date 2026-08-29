@@ -48,6 +48,31 @@ class CasinoBot(commands.Bot):
 
     async def setup_hook(self) -> None:
         await register_cogs(self)
+        await self._sync_app_commands()
+
+    async def _sync_app_commands(self) -> None:
+        """Register hybrid (slash) commands with Discord.
+
+        If DISCORD_GUILD_ID is set, sync to that guild for INSTANT availability
+        (ideal for a single-server bot). Otherwise sync globally, which can take
+        up to ~1 hour to propagate the first time.
+        """
+        try:
+            guild_id = config.bot.guild_id
+            if guild_id:
+                guild = discord.Object(id=guild_id)
+                self.tree.copy_global_to(guild=guild)
+                synced = await self.tree.sync(guild=guild)
+                logger.info(
+                    "Synced %d application command(s) to guild %s",
+                    len(synced),
+                    guild_id,
+                )
+            else:
+                synced = await self.tree.sync()
+                logger.info("Synced %d global application command(s)", len(synced))
+        except discord.HTTPException:
+            logger.exception("Failed to sync application commands")
 
     async def close(self) -> None:
         try:
