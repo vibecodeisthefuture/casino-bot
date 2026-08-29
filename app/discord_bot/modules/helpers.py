@@ -3,6 +3,21 @@ from pathlib import Path
 
 from discord import Color, Embed
 
+from app.config import config
+
+
+def format_money(amount: int, *, signed: bool = False) -> str:
+    """Render a dollar amount with the configured cash emoji (falls back to '$')."""
+    symbol = config.bot.cash_emoji or "$"
+    magnitude = f"{abs(int(amount)):,}"
+    if signed:
+        if amount > 0:
+            return f"+{symbol}{magnitude}"
+        if amount < 0:
+            return f"-{symbol}{magnitude}"
+        return f"{symbol}0"
+    return f"{symbol}{magnitude}"
+
 
 class InsufficientFundsException(Exception):
     def __init__(self, current, bet) -> None:
@@ -10,7 +25,7 @@ class InsufficientFundsException(Exception):
         super().__init__()
 
     def __str__(self) -> str:
-        return f"${self.needs} more needed to play."
+        return f"{format_money(self.needs)} more needed to play."
 
 
 class InsufficientCreditsException(Exception):

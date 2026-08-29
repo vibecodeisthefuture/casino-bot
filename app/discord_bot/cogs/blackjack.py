@@ -15,7 +15,7 @@ from app.discord_bot.modules.betting import validate_money_bet
 from app.discord_bot.modules.card import Card
 from app.discord_bot.modules.card_table import render_card_table_bytes
 from app.discord_bot.modules.economy import Economy
-from app.discord_bot.modules.helpers import make_embed
+from app.discord_bot.modules.helpers import format_money, make_embed
 from app.discord_bot.modules.wallet_logging import log_wallet_change
 
 logger = logging.getLogger(__name__)
@@ -96,11 +96,7 @@ class Blackjack(commands.Cog):
 
     @staticmethod
     def format_delta(amount: int) -> str:
-        if amount > 0:
-            return f"+${amount}"
-        if amount < 0:
-            return f"-${abs(amount)}"
-        return "$0"
+        return format_money(amount, signed=True)
 
     @commands.hybrid_command(
         aliases=["bj"],
@@ -220,7 +216,7 @@ class Blackjack(commands.Cog):
                     insurance_choice = await prompt_action(
                         title="Insurance?",
                         description=(
-                            f"Dealer shows an Ace. Insurance costs ${max_insurance}.\n"
+                            f"Dealer shows an Ace. Insurance costs {format_money(max_insurance)}.\n"
                             "Pays 2:1 if dealer has blackjack."
                         ),
                         emoji_to_action={"✅": "buy", "❌": "skip"},
@@ -244,7 +240,7 @@ class Blackjack(commands.Cog):
                 summary: list[str] = []
 
                 if player_blackjack:
-                    summary.append(f"Main bet: push (${base_bet})")
+                    summary.append(f"Main bet: push ({format_money(base_bet)})")
                 else:
                     net_change -= base_bet
                     summary.append(f"Main bet: dealer blackjack ({self.format_delta(-base_bet)})")

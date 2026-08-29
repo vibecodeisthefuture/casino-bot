@@ -8,7 +8,11 @@ from discord.ext import commands
 from app.config import config
 from app.discord_bot.modules.betting import validate_positive_amount
 from app.discord_bot.modules.economy import Economy
-from app.discord_bot.modules.helpers import InsufficientFundsException, make_embed
+from app.discord_bot.modules.helpers import (
+    InsufficientFundsException,
+    format_money,
+    make_embed,
+)
 from app.discord_bot.modules.wallet_logging import log_wallet_change
 
 logger = logging.getLogger(__name__)
@@ -68,7 +72,9 @@ class GamblingHelpers(commands.Cog, name="General"):
             money_delta=amount,
             ctx=ctx,
         )
-        await ctx.send(f"Added ${amount} come back in {config.bot.bonus_cooldown}hrs")
+        await ctx.send(
+            f"Added {format_money(amount)} come back in {config.bot.bonus_cooldown}hrs"
+        )
 
     @commands.hybrid_command(
         brief="How much money you or someone else has",
@@ -83,7 +89,7 @@ class GamblingHelpers(commands.Cog, name="General"):
         embed = make_embed(
             title=target_user.name,
             description=(
-                "**${:,}**".format(profile[1]) + "\n**{:,}** credits".format(profile[2])
+                f"**{format_money(profile[1])}**\n**{profile[2]:,}** credits"
             ),
         )
         embed.set_thumbnail(url=target_user.display_avatar.url)
@@ -103,7 +109,7 @@ class GamblingHelpers(commands.Cog, name="General"):
             name = user.name if user else f"User {entry[0]}"
             embed.add_field(
                 name=f"{i+1}. {name}",
-                value="${:,}".format(entry[1]),
+                value=format_money(entry[1]),
                 inline=False,
             )
         await ctx.send(embed=embed)
@@ -143,7 +149,10 @@ class GamblingHelpers(commands.Cog, name="General"):
         balance = self.economy.get_entry(ctx.author.id)[1]
         embed = make_embed(
             title="Daily reward claimed!",
-            description=f"You received **${amount:,}**.\nBalance: **${balance:,}**",
+            description=(
+                f"You received **{format_money(amount)}**.\n"
+                f"Balance: **{format_money(balance)}**"
+            ),
             color=discord.Color.green(),
         )
         await ctx.send(embed=embed)
@@ -194,8 +203,8 @@ class GamblingHelpers(commands.Cog, name="General"):
         embed = make_embed(
             title="Payment sent",
             description=(
-                f"{ctx.author.mention} paid **${parsed:,}** to {member.mention}.\n"
-                f"Your balance: **${sender_entry[1]:,}**"
+                f"{ctx.author.mention} paid **{format_money(parsed)}** to {member.mention}.\n"
+                f"Your balance: **{format_money(sender_entry[1])}**"
             ),
             color=discord.Color.green(),
         )

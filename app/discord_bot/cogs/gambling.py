@@ -1,5 +1,6 @@
 import asyncio
 import logging
+import os
 import random
 from contextlib import suppress
 from uuid import uuid4
@@ -14,7 +15,12 @@ from app.discord_bot.modules.betting import validate_money_bet
 from app.discord_bot.modules.card import Card
 from app.discord_bot.modules.card_table import render_card_table_bytes
 from app.discord_bot.modules.economy import Economy
-from app.discord_bot.modules.helpers import InsufficientFundsException, make_embed
+from app.discord_bot.modules.helpers import (
+    ABS_PATH,
+    InsufficientFundsException,
+    format_money,
+    make_embed,
+)
 from app.discord_bot.modules.wallet_logging import log_wallet_change
 
 logger = logging.getLogger(__name__)
@@ -105,11 +111,7 @@ class Gambling(commands.Cog):
 
     @staticmethod
     def _format_delta(amount: int) -> str:
-        if amount > 0:
-            return f"+${amount}"
-        if amount < 0:
-            return f"-${abs(amount)}"
-        return "$0"
+        return format_money(amount, signed=True)
 
     def _resolve_highcard_round(
         self,
@@ -210,9 +212,9 @@ class Gambling(commands.Cog):
                 description=(
                     f"Dealer: **{dealer_card}**\n"
                     f"Player: **{player_card}**\n"
-                    f"Bet: **${bet}**\n"
+                    f"Bet: **{format_money(bet)}**\n"
                     f"Net: **{self._format_delta(delta)}**\n"
-                    f"Balance: **${balance:,}**"
+                    f"Balance: **{format_money(balance)}**"
                 ),
                 color=self._highcard_result_color(delta),
             )
@@ -257,33 +259,58 @@ class Gambling(commands.Cog):
         bet: int = config.bot.default_bet
     ):
         normalized_bet = self.check_bet(ctx, bet)
-        choices = {'h': True, 't': False}
-        choice = choice.lower()[0]
-        if choice in choices.keys():
-            if random.choice(list(choices.keys())) == choice:
-                await ctx.send('correct')
-                self.economy.add_money(ctx.author.id, normalized_bet)
-                log_wallet_change(
-                    logger,
-                    event="coin_flip_win",
-                    user_id=ctx.author.id,
-                    money_delta=normalized_bet,
-                    ctx=ctx,
-                    bet=normalized_bet,
-                )
-            else:
-                await ctx.send('wrong')
-                self.economy.add_money(ctx.author.id, normalized_bet * -1)
-                log_wallet_change(
-                    logger,
-                    event="coin_flip_loss",
-                    user_id=ctx.author.id,
-                    money_delta=normalized_bet * -1,
-                    ctx=ctx,
-                    bet=normalized_bet,
-                )
-        else:
+        letter = choice.lower().strip()[:1]
+        if letter not in ("h", "t"):
             raise BadArgument()
+        if ctx.interaction is not None:
+            await ctx.defer()
+
+        user_pick = "heads" if letter == "h" else "tails"
+        result = random.choice(["heads", "tails"])
+        won = result == user_pick
+
+        if won:
+            delta = normalized_bet
+            title = "You win!"
+            color = discord.Color.green()
+            event = "coin_flip_win"
+        else:
+            delta = normalized_bet * -1
+            title = "You lose!"
+            color = discord.Color.red()
+            event = "coin_flip_loss"
+
+        self.economy.add_money(ctx.author.id, delta)
+        log_wallet_change(
+            logger,
+            event=event,
+            user_id=ctx.author.id,
+            money_delta=delta,
+            ctx=ctx,
+            bet=normalized_bet,
+            call=user_pick,
+            result=result,
+        )
+        balance = self.economy.get_entry(ctx.author.id)[1]
+
+        filename = f"flip_{result}.jpg"
+        file = discord.File(
+            os.path.join(ABS_PATH, "modules", filename),
+            filename=filename,
+        )
+        embed = make_embed(
+            title=title,
+            description=(
+                f"The coin landed on **{result.title()}**.\n"
+                f"Your call: **{user_pick.title()}**\n"
+                f"Bet: **{format_money(normalized_bet)}**\n"
+                f"Net: **{self._format_delta(delta)}**\n"
+                f"Balance: **{format_money(balance)}**"
+            ),
+            color=color,
+        )
+        embed.set_image(url=f"attachment://{filename}")
+        await ctx.send(file=file, embed=embed)
 
     @commands.hybrid_command(
         brief="Roll 1 die\nBet must be greater than $0",

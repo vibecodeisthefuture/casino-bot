@@ -24,6 +24,7 @@ class BotConfig(BaseModel):
     daily_amount: int = Field(default=500, ge=1, le=1_000_000)
     daily_cooldown: int = Field(default=24, ge=1, le=168)
     guild_id: int | None = None
+    cash_emoji: str = ""
 
 
 class StorageConfig(BaseModel):
@@ -47,6 +48,7 @@ env_vars = (
     "DISCORD_DAILY_AMOUNT",
     "DISCORD_DAILY_COOLDOWN",
     "DISCORD_GUILD_ID",
+    "DISCORD_CASH_EMOJI",
     "CASINO_DATA_DIR",
     "CASINO_DATABASE_PATH",
     "CASINO_LOG_PATH",
@@ -96,6 +98,7 @@ def load_config() -> Config:
             daily_amount=_parse_int_env("DISCORD_DAILY_AMOUNT", 500),
             daily_cooldown=_parse_int_env("DISCORD_DAILY_COOLDOWN", 24),
             guild_id=_parse_optional_int_env("DISCORD_GUILD_ID"),
+            cash_emoji=getenv("DISCORD_CASH_EMOJI", "").strip(),
         )
         data_dir = _parse_path_env("CASINO_DATA_DIR", DEFAULT_DATA_DIR)
         database_path = _parse_path_env(
