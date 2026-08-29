@@ -7,16 +7,16 @@ from app.config import config
 
 
 def format_money(amount: int, *, signed: bool = False) -> str:
-    """Render a dollar amount with the configured cash emoji (falls back to '$')."""
-    symbol = config.bot.cash_emoji or "$"
+    """Render a dollar amount as '$1,234' with the cash emoji as a suffix when set."""
+    suffix = f" {config.bot.cash_emoji}" if config.bot.cash_emoji else ""
     magnitude = f"{abs(int(amount)):,}"
     if signed:
         if amount > 0:
-            return f"+{symbol}{magnitude}"
+            return f"+${magnitude}{suffix}"
         if amount < 0:
-            return f"-{symbol}{magnitude}"
-        return f"{symbol}0"
-    return f"{symbol}{magnitude}"
+            return f"-${magnitude}{suffix}"
+        return f"$0{suffix}"
+    return f"${magnitude}{suffix}"
 
 
 class InsufficientFundsException(Exception):

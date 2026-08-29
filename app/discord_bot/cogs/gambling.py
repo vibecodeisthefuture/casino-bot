@@ -313,53 +313,6 @@ class Gambling(commands.Cog):
         await ctx.send(file=file, embed=embed)
 
     @commands.hybrid_command(
-        brief="Roll 1 die\nBet must be greater than $0",
-        description="Roll one die (guess 1-6) — bet must be greater than $0",
-        usage=f"roll [guess:1-6] [bet- default=${config.bot.default_bet}]",
-    )
-    @app_commands.describe(
-        choice="Your guess, 1 to 6",
-        bet=f"Amount to wager (default {config.bot.default_bet})",
-    )
-    async def roll(
-        self,
-        ctx: commands.Context,
-        choice: int,
-        bet: int = config.bot.default_bet
-    ):
-        normalized_bet = self.check_bet(ctx, bet)
-        choices = range(1, 7)
-        if choice in choices:
-            if random.choice(choices) == choice:
-                await ctx.send('correct')
-                delta = normalized_bet * 6
-                self.economy.add_money(ctx.author.id, delta)
-                log_wallet_change(
-                    logger,
-                    event="roll_win",
-                    user_id=ctx.author.id,
-                    money_delta=delta,
-                    ctx=ctx,
-                    bet=normalized_bet,
-                    guess=choice,
-                )
-            else:
-                await ctx.send('wrong')
-                delta = normalized_bet * -1
-                self.economy.add_money(ctx.author.id, delta)
-                log_wallet_change(
-                    logger,
-                    event="roll_loss",
-                    user_id=ctx.author.id,
-                    money_delta=delta,
-                    ctx=ctx,
-                    bet=normalized_bet,
-                    guess=choice,
-                )
-        else:
-            raise BadArgument()
-
-    @commands.hybrid_command(
         brief="Draw a high card against the dealer.\nBet must be greater than $0",
         description="Draw a high card against the dealer",
         usage=f"highcard *[bet- default=${config.bot.default_bet}]",
