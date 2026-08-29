@@ -7,6 +7,7 @@ from discord.ext import commands
 from discord.ext.commands.errors import (
     BadArgument,
     BotMissingPermissions,
+    CheckFailure,
     CommandInvokeError,
     CommandNotFound,
     CommandOnCooldown,
@@ -79,6 +80,10 @@ class Handlers(commands.Cog, name="handlers"):
                 "I must have following permission(s): "
                 + ", ".join(f"`{perm}`" for perm in error.missing_perms)
             )
+            return
+
+        if isinstance(error, CheckFailure):
+            await ctx.send(str(error) or "You can't use that command.")
             return
 
         if isinstance(error, InsufficientFundsException):

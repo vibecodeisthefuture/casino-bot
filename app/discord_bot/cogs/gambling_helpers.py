@@ -7,6 +7,7 @@ from discord.ext import commands
 
 from app.config import config
 from app.discord_bot.modules.betting import validate_positive_amount
+from app.discord_bot.modules.checks import is_admin
 from app.discord_bot.modules.economy import Economy
 from app.discord_bot.modules.helpers import (
     InsufficientFundsException,
@@ -50,31 +51,39 @@ class GamblingHelpers(commands.Cog, name="General"):
             actor_user_id=ctx.author.id,
         )
 
-    @commands.hybrid_command(
-        brief=(
-            f"Gives you ${config.bot.default_bet*config.bot.bonus_multiplier} "
-            f"once every {config.bot.bonus_cooldown}hrs"
-        ),
-        description=(
-            f"Claim your ${config.bot.default_bet*config.bot.bonus_multiplier} "
-            f"bonus every {config.bot.bonus_cooldown}hrs"
-        ),
-        usage="add",
+    @commands.command(
+        brief="(Admin) Add money to a user",
+        usage="add [amount] *[@member]",
+        hidden=True,
     )
-    @commands.cooldown(1, config.bot.bonus_cooldown * 3600, type=commands.BucketType.user)
-    async def add(self, ctx: commands.Context):
-        amount = config.bot.default_bet * config.bot.bonus_multiplier
-        self.economy.add_money(ctx.author.id, amount)
+    @is_admin()
+    async def add(
+        self,
+        ctx: commands.Context,
+        amount: int,
+        member: discord.Member | None = None,
+    ):
+        target = member or ctx.author
+        parsed = validate_positive_amount(amount)
+        self.economy.add_money(target.id, parsed)
+        new_balance = self.economy.get_entry(target.id)[1]
         log_wallet_change(
             logger,
-            event="bonus_add",
-            user_id=ctx.author.id,
-            money_delta=amount,
+            event="admin_add_funds",
+            user_id=target.id,
+            money_delta=parsed,
             ctx=ctx,
+            actor_user_id=ctx.author.id,
         )
-        await ctx.send(
-            f"Added {format_money(amount)} come back in {config.bot.bonus_cooldown}hrs"
+        embed = make_embed(
+            title="Funds added",
+            description=(
+                f"Added **{format_money(parsed)}** to {target.mention}.\n"
+                f"New balance: **{format_money(new_balance)}**"
+            ),
+            color=discord.Color.green(),
         )
+        await ctx.send(embed=embed)
 
     @commands.hybrid_command(
         brief="How much money you or someone else has",
