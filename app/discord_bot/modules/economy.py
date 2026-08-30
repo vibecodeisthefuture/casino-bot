@@ -11,7 +11,7 @@ from app.config import config
 Entry = Tuple[int, int, int]
 DATABASE_PATH = Path(config.storage.database_path)
 LEGACY_DATABASE_PATH = Path(__file__).resolve().parents[3] / "economy.db"
-SCHEMA_VERSION = 3
+SCHEMA_VERSION = 4
 
 logger = logging.getLogger(__name__)
 
@@ -39,10 +39,33 @@ def _migration_3_create_daily_claims(cur: sqlite3.Cursor) -> None:
     )
 
 
+def _migration_4_create_market(cur: sqlite3.Cursor) -> None:
+    cur.execute("ALTER TABLE economy ADD COLUMN bitcoin INTEGER NOT NULL DEFAULT 0")
+    cur.execute(
+        """CREATE TABLE IF NOT EXISTS market_roles (
+        role_id INTEGER NOT NULL PRIMARY KEY,
+        price INTEGER NOT NULL,
+        currency TEXT NOT NULL DEFAULT 'money'
+    )"""
+    )
+    cur.execute(
+        """CREATE TABLE IF NOT EXISTS market_state (
+        id INTEGER PRIMARY KEY CHECK (id = 1),
+        bitcoin_price INTEGER NOT NULL DEFAULT 0,
+        bitcoin_updated INTEGER NOT NULL DEFAULT 0
+    )"""
+    )
+    cur.execute(
+        "INSERT OR IGNORE INTO market_state(id, bitcoin_price, bitcoin_updated) "
+        "VALUES(1, 0, 0)"
+    )
+
+
 MIGRATIONS: dict[int, Callable[[sqlite3.Cursor], None]] = {
     1: _migration_1_create_economy,
     2: _migration_2_add_indexes,
     3: _migration_3_create_daily_claims,
+    4: _migration_4_create_market,
 }
 
 
@@ -239,6 +262,155 @@ class Economy:
             self.conn.rollback()
             raise
         return self._fetch_entry(sender_id), self._fetch_entry(recipient_id)
+
+    def get_bitcoin(self, user_id: int) -> int:
+        self._ensure_entry(user_id)
+        self.cur.execute("SELECT bitcoin FROM economy WHERE user_id=?", (user_id,))
+        row = self.cur.fetchone()
+        return int(row[0]) if row else 0
+
+    def add_bitcoin(self, user_id: int, amount: int) -> None:
+        self._ensure_entry(user_id)
+        self.cur.execute(
+            "UPDATE economy SET bitcoin = MAX(0, bitcoin + ?) WHERE user_id=?",
+            (int(amount), user_id),
+        )
+        self.conn.commit()
+
+    def debit_money(self, user_id: int, amount: int) -> bool:
+        self._ensure_entry(user_id)
+        self.cur.execute(
+            "UPDATE economy SET money = money - ? WHERE user_id=? AND money >= ?",
+            (int(amount), user_id, int(amount)),
+        )
+        ok = self.cur.rowcount == 1
+        self.conn.commit()
+        return ok
+
+    def debit_bitcoin(self, user_id: int, amount: int) -> bool:
+        self._ensure_entry(user_id)
+        self.cur.execute(
+            "UPDATE economy SET bitcoin = bitcoin - ? WHERE user_id=? AND bitcoin >= ?",
+            (int(amount), user_id, int(amount)),
+        )
+        ok = self.cur.rowcount == 1
+        self.conn.commit()
+        return ok
+
+    def buy_bitcoin(self, user_id: int, count: int, unit_price: int) -> int:
+        """Atomically spend ``count * unit_price`` money for ``count`` bitcoin.
+
+        Returns the total cost. Raises ValueError (bad count) or RuntimeError
+        (market unavailable / insufficient funds).
+        """
+        count = int(count)
+        unit_price = int(unit_price)
+        if count <= 0:
+            raise ValueError("count must be positive")
+        if unit_price <= 0:
+            raise RuntimeError("market unavailable")
+        cost = count * unit_price
+        self._ensure_entry(user_id)
+        self.conn.commit()
+        try:
+            self.cur.execute(
+                "UPDATE economy SET money = money - ? WHERE user_id=? AND money >= ?",
+                (cost, user_id, cost),
+            )
+            if self.cur.rowcount != 1:
+                self.conn.rollback()
+                raise RuntimeError("insufficient funds")
+            self.cur.execute(
+                "UPDATE economy SET bitcoin = bitcoin + ? WHERE user_id=?",
+                (count, user_id),
+            )
+            self.conn.commit()
+        except RuntimeError:
+            raise
+        except Exception:
+            self.conn.rollback()
+            raise
+        return cost
+
+    def sell_bitcoin(self, user_id: int, count: int, unit_price: int) -> int:
+        """Atomically sell ``count`` bitcoin for ``count * unit_price`` money.
+
+        Returns the total payout. Raises ValueError (bad count) or RuntimeError
+        (market unavailable / insufficient bitcoin).
+        """
+        count = int(count)
+        unit_price = int(unit_price)
+        if count <= 0:
+            raise ValueError("count must be positive")
+        if unit_price <= 0:
+            raise RuntimeError("market unavailable")
+        payout = count * unit_price
+        self._ensure_entry(user_id)
+        self.conn.commit()
+        try:
+            self.cur.execute(
+                "UPDATE economy SET bitcoin = bitcoin - ? WHERE user_id=? AND bitcoin >= ?",
+                (count, user_id, count),
+            )
+            if self.cur.rowcount != 1:
+                self.conn.rollback()
+                raise RuntimeError("insufficient bitcoin")
+            self.cur.execute(
+                "UPDATE economy SET money = money + ? WHERE user_id=?",
+                (payout, user_id),
+            )
+            self.conn.commit()
+        except RuntimeError:
+            raise
+        except Exception:
+            self.conn.rollback()
+            raise
+        return payout
+
+    def set_market_role(self, role_id: int, price: int, currency: str = "money") -> None:
+        self.cur.execute(
+            "INSERT INTO market_roles(role_id, price, currency) VALUES(?, ?, ?) "
+            "ON CONFLICT(role_id) DO UPDATE SET price=excluded.price, "
+            "currency=excluded.currency",
+            (int(role_id), int(price), currency),
+        )
+        self.conn.commit()
+
+    def remove_market_role(self, role_id: int) -> bool:
+        self.cur.execute("DELETE FROM market_roles WHERE role_id=?", (int(role_id),))
+        removed = self.cur.rowcount > 0
+        self.conn.commit()
+        return removed
+
+    def get_market_role(self, role_id: int):
+        self.cur.execute(
+            "SELECT role_id, price, currency FROM market_roles WHERE role_id=?",
+            (int(role_id),),
+        )
+        return self.cur.fetchone()
+
+    def list_market_roles(self):
+        self.cur.execute(
+            "SELECT role_id, price, currency FROM market_roles ORDER BY price ASC"
+        )
+        return self.cur.fetchall()
+
+    def get_bitcoin_price(self) -> int:
+        self.cur.execute("SELECT bitcoin_price FROM market_state WHERE id=1")
+        row = self.cur.fetchone()
+        return int(row[0]) if row else 0
+
+    def get_bitcoin_updated(self) -> int:
+        self.cur.execute("SELECT bitcoin_updated FROM market_state WHERE id=1")
+        row = self.cur.fetchone()
+        return int(row[0]) if row else 0
+
+    def set_bitcoin_price(self, price: int, updated: int) -> None:
+        self.cur.execute(
+            "UPDATE market_state SET bitcoin_price=?, bitcoin_updated=? WHERE id=1",
+            (int(price), int(updated)),
+        )
+        self.conn.commit()
 
     def random_entry(self) -> Entry:
         self.cur.execute("SELECT * FROM economy")

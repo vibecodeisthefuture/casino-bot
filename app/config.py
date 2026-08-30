@@ -26,6 +26,7 @@ class BotConfig(BaseModel):
     guild_id: int | None = None
     admin_role_id: int | None = None
     cash_emoji: str = ""
+    bitcoin_emoji: str = ""
 
 
 class StorageConfig(BaseModel):
@@ -51,6 +52,7 @@ env_vars = (
     "DISCORD_GUILD_ID",
     "DISCORD_ADMIN_ROLE_ID",
     "DISCORD_CASH_EMOJI",
+    "DISCORD_BITCOIN_EMOJI",
     "CASINO_DATA_DIR",
     "CASINO_DATABASE_PATH",
     "CASINO_LOG_PATH",
@@ -102,6 +104,7 @@ def load_config() -> Config:
             guild_id=_parse_optional_int_env("DISCORD_GUILD_ID"),
             admin_role_id=_parse_optional_int_env("DISCORD_ADMIN_ROLE_ID"),
             cash_emoji=getenv("DISCORD_CASH_EMOJI", "").strip(),
+            bitcoin_emoji=getenv("DISCORD_BITCOIN_EMOJI", "").strip(),
         )
         data_dir = _parse_path_env("CASINO_DATA_DIR", DEFAULT_DATA_DIR)
         database_path = _parse_path_env(

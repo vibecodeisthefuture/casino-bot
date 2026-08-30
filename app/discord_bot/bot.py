@@ -10,6 +10,7 @@ from app.discord_bot.cogs import (
     GamblingHelpers,
     Handlers,
     Help,
+    Market,
     Slots,
 )
 from app.discord_bot.modules.economy import Economy
@@ -22,6 +23,7 @@ COGS = (
     Gambling,
     Handlers,
     Help,
+    Market,
     Slots,
 )
 

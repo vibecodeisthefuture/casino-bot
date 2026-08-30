@@ -19,6 +19,12 @@ def format_money(amount: int, *, signed: bool = False) -> str:
     return f"${magnitude}{suffix}"
 
 
+def format_bitcoin(amount: int) -> str:
+    """Render a whole-coin Bitcoin amount with the configured emoji (or 'BTC')."""
+    unit = config.bot.bitcoin_emoji if config.bot.bitcoin_emoji else "BTC"
+    return f"{int(amount):,} {unit}"
+
+
 class InsufficientFundsException(Exception):
     def __init__(self, current, bet) -> None:
         self.needs = bet - current
