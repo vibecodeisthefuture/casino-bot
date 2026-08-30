@@ -104,7 +104,9 @@ class Market(commands.Cog, name="Black Market"):
                 f"Price: **{format_money(price)}** per coin\n"
                 f"You hold: **{format_bitcoin(held)}** "
                 f"(worth **{format_money(held * price)}**)\n\n"
-                f"Trade at `{config.bot.prefix}market`."
+                f"Trade at `{config.bot.prefix}market`.\n\n"
+                "*Bitcoin price fluctuates over time, roughly mirroring real "
+                "BTC crypto market price.*"
             ),
         )
         await ctx.send(embed=embed)
@@ -114,6 +116,11 @@ class Market(commands.Cog, name="Black Market"):
         money = self.economy.get_entry(ctx.author.id)[1]
         btc = self.economy.get_bitcoin(ctx.author.id)
         lines = [
+            "*Take a break from the Casino and cash in on all that cold hard "
+            "cash you've earned. Whatever you're looking for, I probably got "
+            "it; guns, explosives, NVGs, you name it. Oh, and I can hook you "
+            "up with my crypto guy if you're interested in buying some BTC...*",
+            "",
             f"**Your wallet:** {format_money(money)} · {format_bitcoin(btc)}",
             "",
         ]
