@@ -28,7 +28,66 @@ BUY_BTC = "📈"
 SELL_BTC = "📉"
 REFRESH = "🔄"
 CLOSE = "❌"
-NUMBER_EMOJIS = ["1️⃣", "2️⃣", "3️⃣", "4️⃣", "5️⃣", "6️⃣", "7️⃣", "8️⃣", "9️⃣"]
+ROLE_LIMIT = 25  # Discord select menus allow at most 25 options
+
+
+class _RoleSelect(discord.ui.Select):
+    """Dropdown of purchasable roles; buying is handled in the callback."""
+
+    def __init__(self, cog, ctx, roles):
+        self.cog = cog
+        self.ctx = ctx
+        self.roles = roles
+        options = []
+        for i, (role_id, rprice, currency) in enumerate(roles):
+            role = ctx.guild.get_role(role_id) if ctx.guild else None
+            name = role.name if role else f"(missing role {role_id})"
+            cost = (
+                format_bitcoin(rprice)
+                if currency == "bitcoin"
+                else format_money(rprice)
+            )
+            options.append(
+                discord.SelectOption(
+                    label=name[:100], value=str(i), description=cost[:100]
+                )
+            )
+        super().__init__(
+            placeholder="Buy a role…",
+            min_values=1,
+            max_values=1,
+            options=options,
+        )
+
+    async def callback(self, interaction: discord.Interaction):
+        with suppress(discord.HTTPException):
+            await interaction.response.defer()
+        view = self.view
+        idx = int(self.values[0])
+        if 0 <= idx < len(self.roles):
+            view.note = await self.cog._buy_role(self.ctx, self.roles[idx])
+        view.acted = True
+        view.stop()
+
+
+class MarketRoleView(discord.ui.View):
+    """Holds the role dropdown for one market message; owner-gated."""
+
+    def __init__(self, cog, ctx, roles, timeout):
+        super().__init__(timeout=timeout)
+        self.ctx = ctx
+        self.acted = False
+        self.note = None
+        self.add_item(_RoleSelect(cog, ctx, roles))
+
+    async def interaction_check(self, interaction: discord.Interaction) -> bool:
+        if interaction.user.id != self.ctx.author.id:
+            with suppress(discord.HTTPException):
+                await interaction.response.send_message(
+                    "This isn't your market session.", ephemeral=True
+                )
+            return False
+        return True
 
 
 class Market(commands.Cog, name="Black Market"):
@@ -132,7 +191,7 @@ class Market(commands.Cog, name="Black Market"):
         lines.append("")
         lines.append("**Roles for sale**")
         if roles:
-            for i, (role_id, rprice, currency) in enumerate(roles):
+            for role_id, rprice, currency in roles:
                 role = ctx.guild.get_role(role_id) if ctx.guild else None
                 name = role.name if role else f"(missing role {role_id})"
                 cost = (
@@ -140,7 +199,8 @@ class Market(commands.Cog, name="Black Market"):
                     if currency == "bitcoin"
                     else format_money(rprice)
                 )
-                lines.append(f"{NUMBER_EMOJIS[i]} {name} — {cost}")
+                lines.append(f"• {name} — {cost}")
+            lines.append("_Use the dropdown below to buy a role._")
         else:
             lines.append("Nothing listed right now.")
         lines.append("")
@@ -165,13 +225,17 @@ class Market(commands.Cog, name="Black Market"):
         note = None
         while True:
             price = self.economy.get_bitcoin_price()
-            roles = self.economy.list_market_roles()[: len(NUMBER_EMOJIS)]
-            msg = await ctx.send(embed=self._market_embed(ctx, price, roles, note))
+            roles = self.economy.list_market_roles()[:ROLE_LIMIT]
+            # Roles are bought via the dropdown (View); Bitcoin + navigation stay
+            # on reactions. The message carries both at once.
+            view = MarketRoleView(self, ctx, roles, SESSION_TIMEOUT) if roles else None
+            msg = await ctx.send(
+                embed=self._market_embed(ctx, price, roles, note), view=view
+            )
 
             controls = []
             if price > 0:
                 controls.extend([BUY_BTC, SELL_BTC])
-            controls.extend(NUMBER_EMOJIS[: len(roles)])
             controls.extend([REFRESH, CLOSE])
             for emoji in controls:
                 with suppress(discord.HTTPException):
@@ -185,21 +249,53 @@ class Market(commands.Cog, name="Black Market"):
                     and str(reaction.emoji) in controls
                 )
 
-            try:
-                reaction, _ = await self.client.wait_for(
+            # Wait for EITHER a control reaction OR a role-dropdown selection.
+            reaction_task = asyncio.ensure_future(
+                self.client.wait_for(
                     "reaction_add", timeout=SESSION_TIMEOUT, check=check
                 )
-            except asyncio.TimeoutError:
-                with suppress(discord.HTTPException):
-                    await msg.delete()
-                with suppress(discord.HTTPException):
-                    await ctx.send("Black Market closed (timed out).", delete_after=10)
-                return
+            )
+            wait_tasks = [reaction_task]
+            if view is not None:
+                wait_tasks.append(asyncio.ensure_future(view.wait()))
 
-            emoji = str(reaction.emoji)
+            done, pending = await asyncio.wait(
+                wait_tasks, return_when=asyncio.FIRST_COMPLETED
+            )
+            for task in pending:
+                task.cancel()
+                with suppress(asyncio.CancelledError, Exception):
+                    await task
+            if view is not None and not view.is_finished():
+                view.stop()
+
+            emoji = None
+            role_note = None
+            timed_out = False
+            if view is not None and view.acted:
+                role_note = view.note
+            elif reaction_task in done:
+                try:
+                    reaction, _ = reaction_task.result()
+                    emoji = str(reaction.emoji)
+                except asyncio.TimeoutError:
+                    timed_out = True
+                except asyncio.CancelledError:
+                    timed_out = True
+            else:
+                # The view finished without a selection => it timed out.
+                timed_out = True
+
             with suppress(discord.HTTPException):
                 await msg.delete()
 
+            if role_note is not None:
+                note = role_note
+                continue
+            if timed_out:
+                with suppress(discord.HTTPException):
+                    await ctx.send("Black Market closed (timed out).", delete_after=10)
+                return
             if emoji == CLOSE:
                 return
             if emoji == REFRESH:
@@ -210,11 +306,6 @@ class Market(commands.Cog, name="Black Market"):
                 continue
             if emoji == SELL_BTC:
                 note = self._sell_bitcoin(ctx, price)
-                continue
-            if emoji in NUMBER_EMOJIS:
-                idx = NUMBER_EMOJIS.index(emoji)
-                if idx < len(roles):
-                    note = await self._buy_role(ctx, roles[idx])
                 continue
 
     def _buy_bitcoin(self, ctx, price) -> str:

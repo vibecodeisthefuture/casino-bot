@@ -85,6 +85,46 @@ class GamblingHelpers(commands.Cog, name="General"):
         )
         await ctx.send(embed=embed)
 
+    @commands.command(
+        brief="(Admin) Remove money from a user",
+        usage="remove [amount] *[@member]",
+        hidden=True,
+        aliases=["take"],
+    )
+    @is_admin()
+    async def remove(
+        self,
+        ctx: commands.Context,
+        amount: int,
+        member: discord.Member | None = None,
+    ):
+        target = member or ctx.author
+        parsed = validate_positive_amount(amount)
+        before = self.economy.get_entry(target.id)[1]
+        # add_money clamps at 0 (MAX(0, money + ?)), so this removes up to what
+        # the target actually has; report the real delta rather than the request.
+        self.economy.add_money(target.id, -parsed)
+        new_balance = self.economy.get_entry(target.id)[1]
+        removed = before - new_balance
+        log_wallet_change(
+            logger,
+            event="admin_remove_funds",
+            user_id=target.id,
+            money_delta=-removed,
+            ctx=ctx,
+            actor_user_id=ctx.author.id,
+            requested=parsed,
+        )
+        embed = make_embed(
+            title="Funds removed",
+            description=(
+                f"Removed **{format_money(removed)}** from {target.mention}.\n"
+                f"New balance: **{format_money(new_balance)}**"
+            ),
+            color=discord.Color.orange(),
+        )
+        await ctx.send(embed=embed)
+
     @commands.hybrid_command(
         brief="How much money you or someone else has",
         description="Check your balance or someone else's",

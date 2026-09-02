@@ -131,11 +131,12 @@ Casino:
 
 Bitcoin & Black Market:
 - `$bitcoin` (`$btc` alias) — show the current Bitcoin price and your holdings
-- `$market` (`$blackmarket`, `$shop` aliases) — reaction-driven hub: buy/sell 1 BTC
-  (📈/📉), buy listed roles (number reactions), refresh (🔄), close (❌)
+- `$market` (`$blackmarket`, `$shop` aliases) — the Black Market hub: buy/sell 1 BTC
+  via reactions (📈/📉), **buy roles from a dropdown menu**, refresh (🔄), close (❌)
 
 Admin-only (bot owner or `DISCORD_ADMIN_ROLE_ID`):
 - `$add <amount> [@member]` — add funds to a user (or yourself)
+- `$remove <amount> [@member]` (`$take` alias) — remove funds from a user (clamps at 0)
 - `$addrole <@role> <price> [money|bitcoin]` — list a role for sale
 - `$removerole <@role>` — remove a role listing
 - `$refreshbtc` — force a Bitcoin price refresh now

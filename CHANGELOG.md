@@ -80,6 +80,19 @@ entirely in packaging.
   mirroring real BTC crypto market price."*
 - The `$market` embed carries introductory in-character context below the title.
 
+### Added — admin remove + role dropdown
+- **`$remove <amount> [@member]`** (`$take` alias) — admin-only mirror of `$add` that
+  removes funds. Uses `add_money(target, -amount)`, which clamps at 0
+  (`MAX(0, money + ?)`), so it removes up to what the target holds and reports the
+  actual delta rather than the requested amount.
+- **Black Market role purchases moved from number-emoji reactions to a `discord.ui`
+  dropdown (Select menu).** Bitcoin buy/sell and navigation stay reaction-based
+  (📈/📉/🔄/❌); only role selection uses the dropdown. The market message now carries
+  **both** a View (the role Select) and reactions at once, and the command loop waits
+  on **either** event via `asyncio.wait(..., FIRST_COMPLETED)`. The dropdown is
+  owner-gated (`interaction_check`) and supports up to 25 roles (Discord's Select
+  limit) — up from the previous 9-role number-emoji cap.
+
 ### Nuances / lessons encountered
 - **Custom emoji rendering.** A bot can only render a custom emoji via its full
   `<:name:id>` form (typing `:name:` only works in a human's client composer). Custom
